@@ -1,0 +1,25 @@
+[package]
+name = "sql2ldap"
+version = "0.1.0"
+authors = ["Joel Linn <jl@conductive.de>"]
+license = "AGPL-3.0-only"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+caps = "0.5"
+clap = "2"
+futures = "0.3"
+ldap3_server = "0.1"
+libc = "0.2"
+sqlx = { version = "0.5", features = [ "runtime-tokio-rustls", "postgres" ] }
+tokio = { version = "1", features = ["rt-multi-thread", "io-util", "net", "signal", "macros"] }
+tokio-util = { version = "0.6", features = ["codec"] }
+toml = "0.5"
+seccompiler = "0.2.0"
+serde = "1"
+serde_derive = "1"
+
+[profile.release]
+lto = true

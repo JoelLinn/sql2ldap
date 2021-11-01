@@ -1,0 +1,24 @@
+version: '3.7'
+
+services:
+
+  db:
+    image: postgres
+    restart: always
+    ports:
+      # You often don't want to expose this in production:
+      - 5432:5432
+    environment:
+      POSTGRES_USER:      sql2ldap
+      POSTGRES_PASSWORD:  masterkey
+    volumes:
+      - ./customer_create.sql:/docker-entrypoint-initdb.d/01.sql:ro
+      - ./customer_data.sql:/docker-entrypoint-initdb.d/02.sql:ro
+
+  ldap:
+    image: joellinn/sql2ldap
+    restart: always
+    ports:
+      - 389:389
+    volumes:
+      - ./sql2ldap.toml:/etc/sql2ldap.toml:ro
