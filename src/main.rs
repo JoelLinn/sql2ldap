@@ -148,7 +148,7 @@ fn main() -> Result<(), String> {
                 let err_msg = |err| format!("Failed to install signal handler: {}", err);
 
                 let mut int = signal(SignalKind::interrupt()).map_err(err_msg)?;
-                let mut term = signal(SignalKind::interrupt()).map_err(err_msg)?;
+                let mut term = signal(SignalKind::terminate()).map_err(err_msg)?;
                 tokio::select! {
                     _ = int.recv() => {},
                     _ = term.recv() => {},
@@ -347,32 +347,8 @@ fn build_seccomp_program() -> Result<Vec<BpfProgram>, seccompiler::BackendError>
     } else {
         panic!();
     };
-    let filter_eperm = SeccompFilter::new(
-        vec![
-            (libc::SYS_access, vec![]),
-            (libc::SYS_open, vec![]),
-            (libc::SYS_openat, vec![]),
-            (libc::SYS_newfstatat, vec![]),
-            (libc::SYS_stat, vec![]),
-            (libc::SYS_statx, vec![]),
-        ]
-        .into_iter()
-        .collect(),
-        SeccompAction::Allow,
-        // We can't kill because statx and openat are called in sqlx::PgConnectOptions::new()
-        SeccompAction::Errno(libc::EPERM as u32),
-        target_arch,
-    )?;
     let filter_allow = SeccompFilter::new(
         vec![
-            // allow them here, the previous (stronger) restriction is kept
-            (libc::SYS_access, vec![]),
-            (libc::SYS_open, vec![]),
-            (libc::SYS_openat, vec![]),
-            (libc::SYS_newfstatat, vec![]),
-            (libc::SYS_stat, vec![]),
-            (libc::SYS_statx, vec![]),
-            // actually allowed:
             // TODO socket and connect are only needed because sqlx pool will not pre-connect them
             // https://github.com/launchbadge/sqlx/pull/1527
             // (libc::SYS_socket, vec![]),
@@ -459,7 +435,7 @@ fn build_seccomp_program() -> Result<Vec<BpfProgram>, seccompiler::BackendError>
         SeccompAction::Allow,
         target_arch,
     )?;
-    Ok(vec![filter_eperm.try_into()?, filter_allow.try_into()?])
+    Ok(vec![filter_allow.try_into()?])
 }
 
 async fn acceptor(

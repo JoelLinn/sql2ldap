@@ -22,3 +22,5 @@ services:
       - 389:389
     volumes:
       - ./sql2ldap.toml:/etc/sql2ldap.toml:ro
+    depends_on:
+      - db
