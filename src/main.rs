@@ -292,8 +292,9 @@ fn drop_privileges() -> Result<bool, String> {
                 Err("prctl(PR_SET_NO_NEW_PRIVS, 1) failed".to_owned())?
             }
 
-            caps::clear(None, caps::CapSet::Bounding)
-                .map_err(|err| format!("Could not clear bounding capabilities: {}", err))?;
+            // This will set throw invalid arguments at older kernels:
+            // caps::clear(None, caps::CapSet::Bounding)
+            //     .map_err(|err| format!("Could not clear bounding capabilities: {}", err))?;
             if unsafe { libc::setuid(uid) == -1 } {
                 Err(format!("setuid({}) failed", uid))?
             }
@@ -375,6 +376,16 @@ fn build_seccomp_program() -> Result<Vec<BpfProgram>, seccompiler::BackendError>
             (libc::SYS_getgid, vec![]),
             (libc::SYS_getegid, vec![]),
             (libc::SYS_getrandom, vec![]),
+            (libc::SYS_clock_gettime, vec![]),
+            (libc::SYS_clock_getres, vec![]),
+            (
+                libc::SYS_ioctl,
+                vec![SeccompRule::new(vec![
+                    // isatty()
+                    SeccompCondition::new(0, len_long(), SeccompCmpOp::Eq, 1 as u64)?, // fd == stdout
+                    SeccompCondition::new(1, len_long(), SeccompCmpOp::Eq, libc::TCGETS as u64)?,
+                ])?],
+            ),
             // signal handling:
             (
                 libc::SYS_rt_sigaction,
@@ -392,14 +403,6 @@ fn build_seccomp_program() -> Result<Vec<BpfProgram>, seccompiler::BackendError>
             (libc::SYS_rt_sigreturn, vec![]),
             // (libc::SYS_tgkill, vec![]),
             (libc::SYS_sigaltstack, vec![]),
-            (
-                libc::SYS_ioctl,
-                vec![SeccompRule::new(vec![
-                    // isatty()
-                    SeccompCondition::new(0, len_long(), SeccompCmpOp::Eq, 1 as u64)?, // fd == stdout
-                    SeccompCondition::new(1, len_long(), SeccompCmpOp::Eq, libc::TCGETS as u64)?,
-                ])?],
-            ),
             // memory management
             (
                 libc::SYS_mmap,
