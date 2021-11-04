@@ -92,7 +92,7 @@ fn main() -> Result<(), String> {
         && cfg!(target_os = "linux")
         && (cfg!(target_arch = "x86_64") || cfg!(target_arch = "aarch64"))
     {
-        println!("Warning 🧪: The seccomp filter is highly experimental and known to crash in some configurations!");
+        log::warn!("🧪 The seccomp filtering is highly experimental and known to crash in some configurations! 🧪");
         Some(
             build_seccomp_program()
                 .map_err(|err| format!("Error compiling seccomp filter: {}", err))?,
@@ -142,7 +142,7 @@ fn main() -> Result<(), String> {
             // Initiate the acceptor task.
             tokio::spawn(acceptor(listener_tokio, config, db_pool));
 
-            println!("serving ldap://{} ...", addr);
+            log::info!("serving ldap://{} ...", addr);
             if cfg![target_family = "unix"] {
                 use tokio::signal::unix::*;
                 let err_msg = |err| format!("Failed to install signal handler: {}", err);
@@ -475,13 +475,11 @@ async fn handle_client(
     while let Some(msg) = reqs.next().await {
         // TODO switch to full Op handling
         let search_sizelimit = match &msg {
-            Ok(msg) => {
-                match &msg.op {
-                    ldap3_server::proto::LdapOp::SearchRequest(req) => req.sizelimit,
-                    _ => 0,
-                }
+            Ok(msg) => match &msg.op {
+                ldap3_server::proto::LdapOp::SearchRequest(req) => req.sizelimit,
+                _ => 0,
             },
-            Err(_) => 0
+            Err(_) => 0,
         };
 
         let server_op = match msg

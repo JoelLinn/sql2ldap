@@ -98,7 +98,6 @@ impl LdapSession {
                     return vec![lsr.gen_error(LdapResultCode::NoSuchObject, "".to_owned())];
                 }
                 cn_base_search = Some(ident_split[1].to_owned());
-                println!("{}", ident);
             }
         } else if base_lower != suffix_lower {
             // no infinite tree depths
