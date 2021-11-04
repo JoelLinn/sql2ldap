@@ -473,6 +473,17 @@ async fn handle_client(
     let mut session = LdapSession::new(config, db_pool);
 
     while let Some(msg) = reqs.next().await {
+        // TODO switch to full Op handling
+        let search_sizelimit = match &msg {
+            Ok(msg) => {
+                match &msg.op {
+                    ldap3_server::proto::LdapOp::SearchRequest(req) => req.sizelimit,
+                    _ => 0,
+                }
+            },
+            Err(_) => 0
+        };
+
         let server_op = match msg
             .map_err(|_e| ())
             .and_then(|msg| ServerOps::try_from(msg))
@@ -492,7 +503,7 @@ async fn handle_client(
 
         let result = match server_op {
             ServerOps::SimpleBind(sbr) => vec![session.do_bind(&sbr).await],
-            ServerOps::Search(sr) => session.do_search(&sr).await,
+            ServerOps::Search(sr) => session.do_search(&sr, search_sizelimit).await,
             ServerOps::Unbind(_) => {
                 return;
             }

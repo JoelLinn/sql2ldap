@@ -49,7 +49,7 @@ impl LdapSession {
         }
     }
 
-    pub async fn do_search(&mut self, lsr: &SearchRequest) -> Vec<LdapMsg> {
+    pub async fn do_search(&mut self, lsr: &SearchRequest, size_limit: i32) -> Vec<LdapMsg> {
         let base_lower = lsr.base.to_ascii_lowercase();
         let suffix_lower = self.conf.ldap.suffix.to_lowercase();
         let mut cn_base_search: Option<String> = None;
@@ -139,13 +139,18 @@ impl LdapSession {
                 }
             }
         };
-
         query.push_str(&q_filter);
 
-        if self.conf.server.debug.unwrap_or(false) {
-            println!("Query: {}", query);
-            if !bindings.is_empty() {
-                println!("Params: \"{}\"", bindings.join("\", \""));
+        if size_limit > 0 {
+            query.push_str(&format!("LIMIT {}", size_limit));
+        }
+
+        if log::log_enabled!(log::Level::Debug) {
+            if self.conf.server.debug.unwrap() {
+                log::debug!("Query: {}", query);
+                if !bindings.is_empty() {
+                    log::debug!("Params: \"{}\"", bindings.join("\", \""));
+                }
             }
         }
 
