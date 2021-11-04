@@ -51,7 +51,7 @@ pub struct ConfigSql {
 }
 
 impl ConfigSql {
-    pub fn get_socket(&self) -> Option<&str> {
+    pub fn socket(&self) -> Option<&str> {
         if self.host.starts_with("unix://") {
             Some(&self.host["unix://".len()..])
         } else {

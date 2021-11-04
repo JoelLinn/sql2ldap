@@ -12,10 +12,12 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::fs::File;
 use std::io::Read;
 use std::net;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 mod config;
@@ -38,8 +40,9 @@ static DEFAULT_CONFIG_FILE: &str = "/etc/sql2ldap.toml";
 static DEFAULT_USER: &str = "nobody";
 static DEFAULT_GROUP: &str = "nogroup";
 
-//#[tokio::main]
-//async fn main() -> Result<(), String> {
+static SECCOMP_ARMED: AtomicBool = AtomicBool::new(false);
+thread_local!(static SECCOMP_INSTALLED: RefCell<bool> = RefCell::new(false));
+
 fn main() -> Result<(), String> {
     let cmd = load_command_line();
 
@@ -56,6 +59,27 @@ fn main() -> Result<(), String> {
         c
     });
 
+    {
+        use simplelog::{
+            ColorChoice, CombinedLogger, Config, LevelFilter, TermLogger, TerminalMode,
+        };
+        let level = if config.server.debug.unwrap() {
+            LevelFilter::Debug
+        } else {
+            LevelFilter::Warn
+        };
+        CombinedLogger::init(vec![
+            TermLogger::new(
+                level,
+                Config::default(),
+                TerminalMode::Mixed,
+                ColorChoice::Auto,
+            ),
+            // TODO add file logger
+        ])
+        .map_err(|err| format!("Could not initialize logger: {}", err))?;
+    }
+
     // Bind before dropping privileges:
     let addr = net::SocketAddr::new(config.server.ip, config.server.port.unwrap_or(389));
     let listener = std::net::TcpListener::bind(&addr)
@@ -64,7 +88,7 @@ fn main() -> Result<(), String> {
 
     drop_privileges()?;
 
-    let seccomp_programs = if config.server.seccomp.unwrap_or(false)
+    let seccomp_programs = if config.server.seccomp.unwrap()
         && cfg!(target_os = "linux")
         && (cfg!(target_arch = "x86_64") || cfg!(target_arch = "aarch64"))
     {
@@ -78,25 +102,45 @@ fn main() -> Result<(), String> {
     };
 
     let mut rt_builder = tokio::runtime::Builder::new_multi_thread();
-    if let Some(threads) = config.server.threads {
-        rt_builder.worker_threads(threads);
+    if config.server.seccomp.unwrap() {
+        rt_builder.max_blocking_threads(1);
+    }
+    if cfg!(target_os = "linux") && config.server.seccomp.unwrap() {
+        rt_builder.on_thread_unpark(move || {
+            if !SECCOMP_INSTALLED.with(|f| *f.borrow()) && SECCOMP_ARMED.load(Ordering::Acquire) {
+                log::debug!("installing seccomp filter for tid {}", unsafe {
+                    libc::syscall(libc::SYS_gettid)
+                });
+                if let Some(ps) = &seccomp_programs {
+                    for p in ps {
+                        seccompiler::apply_filter(p).expect("Error applying seccomp filter");
+                    }
+                }
+                SECCOMP_INSTALLED.with(|f| *f.borrow_mut() = true);
+            }
+        });
     }
     rt_builder
+        .worker_threads(config.server.threads.unwrap())
         .enable_all()
-        .on_thread_start(move || {
-            if let Some(ps) = &seccomp_programs {
-                for p in ps {
-                    seccompiler::apply_filter(p).expect("Error applying seccomp filter");
-                }
-            }
-        })
         .build()
         .unwrap()
         .block_on(async {
+            let (con_opts, pool_opts) = build_pg_connect_options(&config);
+            let db_pool = Arc::new(
+                pool_opts
+                    .connect_with(con_opts)
+                    .await
+                    .map_err(|err| format!("Could not connect to database: {}", err))?,
+            );
+
+            // Apply seccomp filters after db connections where opened
+            SECCOMP_ARMED.store(true, Ordering::Release);
+
             let listener_tokio = Box::new(TcpListener::from_std(listener).unwrap());
 
             // Initiate the acceptor task.
-            tokio::spawn(acceptor(listener_tokio, config));
+            tokio::spawn(acceptor(listener_tokio, config, db_pool));
 
             println!("serving ldap://{} ...", addr);
             if cfg![target_family = "unix"] {
@@ -179,12 +223,52 @@ fn load_config(config_toml_filename: &str) -> Result<Config, String> {
             ));
         }
     };
-    toml::from_str(&config_toml).map_err(|err| {
+    let mut config: Config = toml::from_str(&config_toml).map_err(|err| {
         format!(
             "Error parsing config file {}: {}",
             config_toml_filename, err
         )
-    })
+    })?;
+
+    // Fill (some) defaults:
+    // This uses the same method as tokio:
+    config.server.threads = config.server.threads.or_else(|| Some(num_cpus::get()));
+    config.server.seccomp = config.server.seccomp.or(Some(false));
+    config.server.debug = config.server.debug.or(Some(false));
+
+    Ok(config)
+}
+
+fn build_pg_connect_options(
+    conf: &Config,
+) -> (
+    sqlx::postgres::PgConnectOptions,
+    sqlx::postgres::PgPoolOptions,
+) {
+    let mut con_opts = sqlx::postgres::PgConnectOptions::new()
+        .username(&conf.sql.user)
+        .password(&conf.sql.pass)
+        .database(&conf.sql.database);
+    con_opts = match conf.sql.socket() {
+        Some(socket) => con_opts.socket(socket),
+        None => con_opts.host(&conf.sql.host),
+    };
+    if let Some(port) = conf.sql.port {
+        con_opts = con_opts.port(port);
+    }
+
+    let t = conf.server.threads.unwrap() as u32;
+    let mut pool_opts = sqlx::postgres::PgPoolOptions::new();
+    if conf.server.seccomp.unwrap() {
+        // Can't open a connection when seccomp filter is active
+        pool_opts = pool_opts
+            .max_lifetime(None)
+            .idle_timeout(None)
+            .max_connections(t)
+            .min_connections(t);
+    }
+
+    (con_opts, pool_opts)
 }
 
 fn drop_privileges() -> Result<bool, String> {
@@ -250,11 +334,12 @@ fn load_uid_gid() -> Result<(libc::uid_t, libc::gid_t), String> {
     any(target_arch = "x86_64", target_arch = "aarch64")
 ))]
 fn build_seccomp_program() -> Result<Vec<BpfProgram>, seccompiler::BackendError> {
-    let _arg_len_pointer = if cfg!(target_pointer_width = "32") {
-        SeccompCmpArgLen::Dword
+    let len_pointer = if cfg!(target_pointer_width = "32") {
+        || SeccompCmpArgLen::Dword
     } else {
-        SeccompCmpArgLen::Qword
+        || SeccompCmpArgLen::Qword
     };
+    let len_long = len_pointer;
     let target_arch = if cfg!(target_arch = "x86_64") {
         TargetArch::x86_64
     } else if cfg!(target_arch = "aarch64") {
@@ -264,9 +349,9 @@ fn build_seccomp_program() -> Result<Vec<BpfProgram>, seccompiler::BackendError>
     };
     let filter_eperm = SeccompFilter::new(
         vec![
-            // 72 fcntl ??
             (libc::SYS_access, vec![]),
             (libc::SYS_open, vec![]),
+            (libc::SYS_openat, vec![]),
             (libc::SYS_newfstatat, vec![]),
             (libc::SYS_stat, vec![]),
             (libc::SYS_statx, vec![]),
@@ -288,9 +373,11 @@ fn build_seccomp_program() -> Result<Vec<BpfProgram>, seccompiler::BackendError>
             (libc::SYS_stat, vec![]),
             (libc::SYS_statx, vec![]),
             // actually allowed:
-            (libc::SYS_socket, vec![]),
+            // TODO socket and connect are only needed because sqlx pool will not pre-connect them
+            // https://github.com/launchbadge/sqlx/pull/1527
+            // (libc::SYS_socket, vec![]),
+            // (libc::SYS_connect, vec![]),
             (libc::SYS_sendto, vec![]),
-            (libc::SYS_connect, vec![]),
             (libc::SYS_shutdown, vec![]),
             (libc::SYS_getsockopt, vec![]),
             (libc::SYS_epoll_wait, vec![]),
@@ -327,8 +414,16 @@ fn build_seccomp_program() -> Result<Vec<BpfProgram>, seccompiler::BackendError>
             ),
             (libc::SYS_rt_sigprocmask, vec![]),
             (libc::SYS_rt_sigreturn, vec![]),
-            (libc::SYS_tgkill, vec![]),
+            // (libc::SYS_tgkill, vec![]),
             (libc::SYS_sigaltstack, vec![]),
+            (
+                libc::SYS_ioctl,
+                vec![SeccompRule::new(vec![
+                    // isatty()
+                    SeccompCondition::new(0, len_long(), SeccompCmpOp::Eq, 1 as u64)?, // fd == stdout
+                    SeccompCondition::new(1, len_long(), SeccompCmpOp::Eq, libc::TCGETS as u64)?,
+                ])?],
+            ),
             // memory management
             (
                 libc::SYS_mmap,
@@ -367,11 +462,20 @@ fn build_seccomp_program() -> Result<Vec<BpfProgram>, seccompiler::BackendError>
     Ok(vec![filter_eperm.try_into()?, filter_allow.try_into()?])
 }
 
-async fn acceptor(listener: Box<TcpListener>, config: Arc<Config>) {
+async fn acceptor(
+    listener: Box<TcpListener>,
+    config: Arc<Config>,
+    db_pool: Arc<sqlx::postgres::PgPool>,
+) {
     loop {
         match listener.accept().await {
             Ok((socket, paddr)) => {
-                tokio::spawn(handle_client(socket, paddr, config.clone()));
+                tokio::spawn(handle_client(
+                    socket,
+                    paddr,
+                    config.clone(),
+                    db_pool.clone(),
+                ));
             }
             Err(_e) => {
                 //pass
@@ -380,12 +484,17 @@ async fn acceptor(listener: Box<TcpListener>, config: Arc<Config>) {
     }
 }
 
-async fn handle_client(socket: TcpStream, _paddr: net::SocketAddr, config: Arc<Config>) {
+async fn handle_client(
+    socket: TcpStream,
+    _paddr: net::SocketAddr,
+    config: Arc<Config>,
+    db_pool: Arc<sqlx::postgres::PgPool>,
+) {
     // Configure the codec etc.
     let (r, w) = tokio::io::split(socket);
     let mut reqs = FramedRead::new(r, LdapCodec);
     let mut resp = FramedWrite::new(w, LdapCodec);
-    let mut session = LdapSession::new(config);
+    let mut session = LdapSession::new(config, db_pool);
 
     while let Some(msg) = reqs.next().await {
         let server_op = match msg
@@ -409,7 +518,6 @@ async fn handle_client(socket: TcpStream, _paddr: net::SocketAddr, config: Arc<C
             ServerOps::SimpleBind(sbr) => vec![session.do_bind(&sbr).await],
             ServerOps::Search(sr) => session.do_search(&sr).await,
             ServerOps::Unbind(_) => {
-                session.do_unbind().await;
                 return;
             }
             ServerOps::Whoami(wr) => vec![session.do_whoami(&wr)],

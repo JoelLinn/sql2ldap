@@ -15,30 +15,27 @@
 use std::sync::Arc;
 
 use futures::TryStreamExt;
-
 use ldap3_server::proto::{
     LdapFilter, LdapMsg, LdapPartialAttribute, LdapResultCode, LdapSearchResultEntry,
 };
 use ldap3_server::simple::{SearchRequest, SimpleBindRequest, WhoamiRequest};
 use ldap3_server::LdapSearchScope;
-
-use sqlx::postgres::PgConnectOptions;
-use sqlx::{Connection, PgConnection, Row};
+use sqlx::Row;
 
 use crate::config::*;
 
 pub struct LdapSession {
     conf: Arc<Config>,
+    db_pool: Arc<sqlx::postgres::PgPool>,
     dn: String,
-    sql_connection: Option<PgConnection>,
 }
 
 impl LdapSession {
-    pub fn new(conf: Arc<Config>) -> Self {
+    pub fn new(conf: Arc<Config>, db_pool: Arc<sqlx::postgres::PgPool>) -> Self {
         Self {
             conf,
+            db_pool,
             dn: String::default(),
-            sql_connection: None,
         }
     }
 
@@ -46,28 +43,9 @@ impl LdapSession {
         if sbr.dn == "" && sbr.pw == "" {
             self.dn = "Anonymous".to_owned();
 
-            // TODO other backends
-            let con_opts = build_pg_connect_options(&self.conf.sql);
-            match PgConnection::connect_with(&con_opts).await {
-                Ok(connection) => {
-                    self.sql_connection = Some(connection);
-                    sbr.gen_success()
-                }
-                Err(e) => {
-                    println!("Could not connect to database: {}", e);
-                    sbr.gen_operror("Could not connect to backend")
-                }
-            }
+            sbr.gen_success()
         } else {
             sbr.gen_invalid_cred()
-        }
-    }
-
-    pub async fn do_unbind(&mut self) {
-        if let Some(con) = self.sql_connection.take() {
-            con.close().await.unwrap_or_else(|e| {
-                println!("Error on unbind: {}", e);
-            });
         }
     }
 
@@ -172,21 +150,11 @@ impl LdapSession {
         }
 
         let mut rows = {
-            let conn = match self.sql_connection.as_mut() {
-                Some(c) => c,
-                None => {
-                    return vec![lsr.gen_error(
-                        LdapResultCode::OperationsError,
-                        "Client did not bind.".to_owned(),
-                    )]
-                }
-            };
-
             let mut q = sqlx::query(&query);
             for b in bindings {
                 q = q.bind(b);
             }
-            q.fetch(conn)
+            q.fetch(self.db_pool.as_ref())
         };
         let mut results: Vec<LdapMsg> = Vec::new();
 
@@ -237,21 +205,6 @@ impl LdapSession {
     pub fn do_whoami(&mut self, wr: &WhoamiRequest) -> LdapMsg {
         wr.gen_success(format!("dn: {}", self.dn).as_str())
     }
-}
-
-fn build_pg_connect_options(conf: &ConfigSql) -> PgConnectOptions {
-    let mut con_opts = PgConnectOptions::new()
-        .username(&conf.user)
-        .password(&conf.pass)
-        .database(&conf.database);
-    con_opts = match conf.get_socket() {
-        Some(socket) => con_opts.socket(socket),
-        None => con_opts.host(&conf.host),
-    };
-    if let Some(port) = conf.port {
-        con_opts = con_opts.port(port);
-    }
-    con_opts
 }
 
 fn build_select(mappings: &Mappings, lsr: &SearchRequest) -> Result<String, Vec<LdapMsg>> {
