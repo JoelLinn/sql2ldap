@@ -74,13 +74,24 @@ impl LdapSession {
                     lsr.gen_success(),
                 ];
             } else if base_lower == suffix_lower {
+                let dc = suffix_lower
+                    [(suffix_lower.find("=").unwrap() + 1)..suffix_lower.find(",").unwrap()]
+                    .to_owned();
                 return vec![
                     lsr.gen_result_entry(LdapSearchResultEntry {
                         dn: self.conf.ldap.suffix.to_owned(),
                         attributes: vec![
                             LdapPartialAttribute {
                                 atype: "objectClass".to_owned(),
-                                vals: vec!["organization".to_owned()],
+                                vals: vec!["dcObject".to_owned()],
+                            },
+                            LdapPartialAttribute {
+                                atype: "dc".to_owned(),
+                                vals: vec![dc],
+                            },
+                            LdapPartialAttribute {
+                                atype: "hasSubordinates".to_owned(),
+                                vals: vec!["TRUE".to_owned()],
                             },
                             LdapPartialAttribute {
                                 atype: "entryDN".to_owned(),
@@ -101,7 +112,7 @@ impl LdapSession {
             }
         } else if base_lower != suffix_lower {
             // no infinite tree depths
-            return vec![lsr.gen_error(LdapResultCode::NoSuchObject, "".to_owned())];
+            return vec![lsr.gen_success()];
         }
 
         //
@@ -163,10 +174,11 @@ impl LdapSession {
         let mut results: Vec<LdapMsg> = Vec::new();
 
         while let Some(row) = rows.try_next().await.unwrap() {
-            let mut attributes = Vec::with_capacity(if lsr.attrs.len() > 0 {
-                lsr.attrs.len()
-            } else {
+            let all = lsr.attrs.len() == 0 || lsr.attrs.contains(&"*".to_owned());
+            let mut attributes = Vec::with_capacity(if all {
                 self.conf.mappings.len()
+            } else {
+                lsr.attrs.len()
             });
 
             let mut add_attribute = |attr: String, col: &str| {
@@ -179,18 +191,18 @@ impl LdapSession {
                     })
                 };
             };
-            if lsr.attrs.len() > 0 {
+            if all {
+                // Return all attributes
+                for (attr_lowercase, attr, _) in &self.conf.mappings {
+                    add_attribute(attr.to_string(), &attr_lowercase);
+                }
+            } else {
                 // Only requested attributes
                 for attr_search in &lsr.attrs {
                     // Add with proper case
                     if let Some((attr_lower, attr, _)) = self.conf.mappings.get(&attr_search) {
                         add_attribute(attr.to_string(), attr_lower);
                     }
-                }
-            } else {
-                // Return all attributes
-                for (attr_lowercase, attr, _) in &self.conf.mappings {
-                    add_attribute(attr.to_string(), &attr_lowercase);
                 }
             }
 
