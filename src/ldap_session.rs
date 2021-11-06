@@ -56,7 +56,7 @@ impl LdapSession {
 
         // Tree discovery
         if lsr.scope == LdapSearchScope::Base {
-            if lsr.base == "" {
+            if lsr.base.is_empty() {
                 return vec![
                     lsr.gen_result_entry(LdapSearchResultEntry {
                         dn: "".to_owned(),
@@ -73,21 +73,34 @@ impl LdapSession {
                     }),
                     lsr.gen_success(),
                 ];
+            } else if suffix_lower.ends_with(&format!(",{}", base_lower)) {
+                return vec![lsr.gen_success()];
             } else if base_lower == suffix_lower {
-                let dc = suffix_lower
+                let leaf_short = suffix_lower[0..suffix_lower.find("=").unwrap()].to_owned();
+                let leaf_name = suffix_lower
                     [(suffix_lower.find("=").unwrap() + 1)..suffix_lower.find(",").unwrap()]
                     .to_owned();
+                let object_class = match &leaf_short as &str {
+                    "dc" => "dcObject".to_owned(),
+                    "ou" => "organizationalUnit".to_owned(),
+                    _ => {
+                        log::error!("The base dn type \"{}\" is not implemented", leaf_short);
+                        return vec![
+                            lsr.gen_error(LdapResultCode::Other, "Not implemented".to_owned())
+                        ];
+                    }
+                };
                 return vec![
                     lsr.gen_result_entry(LdapSearchResultEntry {
                         dn: self.conf.ldap.suffix.to_owned(),
                         attributes: vec![
                             LdapPartialAttribute {
                                 atype: "objectClass".to_owned(),
-                                vals: vec!["dcObject".to_owned()],
+                                vals: vec![object_class],
                             },
                             LdapPartialAttribute {
-                                atype: "dc".to_owned(),
-                                vals: vec![dc],
+                                atype: leaf_short,
+                                vals: vec![leaf_name],
                             },
                             LdapPartialAttribute {
                                 atype: "hasSubordinates".to_owned(),
@@ -109,6 +122,8 @@ impl LdapSession {
                     return vec![lsr.gen_error(LdapResultCode::NoSuchObject, "".to_owned())];
                 }
                 cn_base_search = Some(ident_split[1].to_owned());
+            } else {
+                return vec![lsr.gen_error(LdapResultCode::NoSuchObject, String::new())];
             }
         } else if base_lower != suffix_lower {
             // no infinite tree depths
