@@ -19,7 +19,7 @@ ldapsearch -x -b "ou=customers,dc=example,dc=com" -H ldap://localhost:389 "(&(o=
 
 To which _sql2ldap_ will answer:
 
-```ldiff
+```ldif
 # extended LDIF
 #
 # LDAPv3

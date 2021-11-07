@@ -1,0 +1,7 @@
+#
+# Configure openldap to map sql2ldap into it's tree using the ldap backend slapd-ldap(5)
+#
+dn: cn=module{0},cn=config
+cn: module{0}
+objectClass: olcModuleList
+olcModuleLoad: back_ldap

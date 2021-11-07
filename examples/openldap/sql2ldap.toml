@@ -1,0 +1,40 @@
+[server]
+ip          = "0.0.0.0"
+#port        = 389
+# Set number of threads, defaults to core count
+#threads     =
+# Limit capabilities using seccomp bpf (experimental)
+seccomp     = true
+# Set log level to debug
+debug       = true
+
+[sql]
+backend     = "PostgreSQL"
+host        = "db"
+# host        = "unix:///var/run/postgresql/.s.PGSQL.5432"
+# port        = 5432
+user        = "sql2ldap"
+pass        = "masterkey"
+database    = "sql2ldap"
+table       = "customer"
+
+[ldap]
+suffix      = "ou=customers,ou=contacts,dc=example,dc=com"
+
+[mappings]
+objectClass     = "'inetOrgPerson'"
+cn              = "CAST(id AS TEXT)"
+displayName     = """\
+    CONCAT(\
+        NULLIF(company, '') || ': ',\
+        surname,\
+        CASE WHEN surname <> '' AND forename <> '' THEN ', ' ELSE NULL END,\
+        forename\
+    )\
+    """
+o               = "company"
+sn              = "surname"
+givenName       = "forename"
+telephoneNumber = "phone"
+mobile          = "mobile"
+mail            = "email"

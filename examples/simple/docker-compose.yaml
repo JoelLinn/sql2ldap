@@ -3,10 +3,10 @@ version: '3.7'
 services:
 
   db:
-    image: postgres
+    image: postgres:14
     restart: always
     ports:
-      # You often don't want to expose this in production:
+      # You normally don't want to expose this in production:
       - 5432:5432
     environment:
       POSTGRES_USER:      sql2ldap

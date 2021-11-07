@@ -1,0 +1,5 @@
+dn: olcDatabase={-1}frontend,cn=config
+changetype: modify
+add: olcSizeLimit
+# phpldapadmin fetches every entry individually and is therefore really slow:
+olcSizeLimit: 100

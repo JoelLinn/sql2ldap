@@ -1,0 +1,21 @@
+dn: ou=contacts,dc=example,dc=com
+objectClass: organizationalUnit
+ou: contacts
+
+dn: ou=employees,ou=contacts,dc=example,dc=com
+objectClass: organizationalUnit
+ou: employees
+
+dn: cn=Gerhard Meyer,ou=employees,ou=contacts,dc=example,dc=com
+sn: Meyer
+givenName: Gerhard
+cn: Gerhard Meyer
+objectClass: inetOrgPerson
+homePhone: +1235698724
+
+dn: cn=Claus Wolfhart,ou=employees,ou=contacts,dc=example,dc=com
+sn: Wolfhart
+givenName: Claus
+cn: Claus Wolfhart
+objectClass: inetOrgPerson
+mobile: +321654987789

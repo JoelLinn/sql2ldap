@@ -1,6 +1,6 @@
 # 📋 sql2ldap 🍇
 
-An LDAP server that presents SQL rows as LDAP leafs under a single DN
+An LDAP server that presents SQL rows as LDAP leafs under a single DN.
 
 ## Overview
 
@@ -12,11 +12,14 @@ There are multiple ways to tackle this problem:
 * Triggers on the SQL database to update the LDAP entries individually.
 * Dynamically translate LDAP queries to SQL queries (this tool).
 
-## Example
+The recently deprecated `back_sql` backend of _OpenLDAP_ also supports the last option.
+It is much more versatile (it can store complete trees) but therefore generates strongly fragmented _SQL_ query patterns (i.e. one unique query for each attribute of every result) - even for simple one-table, one-objectClass ,mappings like the ones this tool supports.
 
-You can find an example using docker-compose with a PostgreSQL server [here][example-simple].
+## Examples
 
-[example-simple]: https://github.com/joellinn/sql2ldap/tree/master/examples/simple
+You can find an examples using docker-compose with a PostgreSQL server [here][examples].
+
+[examples]: https://github.com/joellinn/sql2ldap/tree/master/examples
 
 ## (Un)supported features
 
@@ -25,6 +28,8 @@ At this time however, only PostgreSQL is implemented here.
 Others should be easy to add and I'm happy to accept your contribution!
 
 [sqlx]: https://github.com/launchbadge/sqlx
+
+Currently no TLS or Authentication is implemented. It can be achieved by using _OpenLDAP_ with `back_ldap`.
 
 ## License
 

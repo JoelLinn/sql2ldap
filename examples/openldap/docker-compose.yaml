@@ -1,0 +1,54 @@
+version: '3.7'
+
+services:
+
+  db:
+    image: postgres:14
+    restart: always
+    environment:
+      POSTGRES_USER:      sql2ldap
+      POSTGRES_PASSWORD:  masterkey
+    volumes:
+      - ../simple/customer_create.sql:/docker-entrypoint-initdb.d/01.sql:ro
+      - ../simple/customer_data.sql:/docker-entrypoint-initdb.d/02.sql:ro
+      - ./customer_data_less.sql:/docker-entrypoint-initdb.d/03.sql:ro
+
+  sql2ldap:
+    image: joellinn/sql2ldap
+    restart: always
+    volumes:
+      - ./sql2ldap.toml:/etc/sql2ldap.toml:ro
+    depends_on:
+      - db
+
+  openldap:
+    image: bitnami/openldap:2.5
+    restart: always
+    ports:
+      - '389:1389'
+    environment:
+      - LDAP_ROOT=dc=example,dc=com
+      - LDAP_CONFIG_ADMIN_ENABLED=yes
+      - LDAP_CONFIG_ADMIN_USERNAME=admin
+      - LDAP_CONFIG_ADMIN_PASSWORD=configpassword
+    volumes:
+      - ./initialize-ldap.sh:/docker-entrypoint-initdb.d/initialize-ldap.sh
+      - ./ldap_conf:/ldap_conf
+
+
+  phppgadmin:
+    image: bitnami/phppgadmin:7
+    environment:
+      - DATABASE_HOST=db
+    ports:
+      - '8080:8080'
+    depends_on:
+      - db
+
+  phpldapadmin:
+    image: osixia/phpldapadmin:0.9.0
+    ports:
+      - '8081:80'
+    environment:
+      - PHPLDAPADMIN_HTTPS=false
+      - 'PHPLDAPADMIN_LDAP_HOSTS=ldap://openldap:1389'

@@ -1,0 +1,12 @@
+#
+# Configure openldap to map sql2ldap into it's tree using the ldap backend slapd-ldap(5)
+#
+dn: olcDatabase={2}ldap,cn=config
+objectClass: olcDatabaseConfig
+objectClass: olcLDAPConfig
+olcDatabase: {2}ldap
+olcSuffix: ou=customers,ou=contacts,dc=example,dc=com
+olcDbUri: "ldap://sql2ldap"
+olcReadonly: TRUE
+# Make this db searchable from the mdb tree dc=example,dc=com :
+olcSubordinate: TRUE
