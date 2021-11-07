@@ -248,7 +248,8 @@ fn build_pg_connect_options(
     let mut con_opts = sqlx::postgres::PgConnectOptions::new()
         .username(&conf.sql.user)
         .password(&conf.sql.pass)
-        .database(&conf.sql.database);
+        .database(&conf.sql.database)
+        .application_name(clap::crate_name!());
     con_opts = match conf.sql.socket() {
         Some(socket) => con_opts.socket(socket),
         None => con_opts.host(&conf.sql.host),
