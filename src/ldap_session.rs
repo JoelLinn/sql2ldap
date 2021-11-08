@@ -171,11 +171,9 @@ impl LdapSession {
         }
 
         if log::log_enabled!(log::Level::Debug) {
-            if self.conf.server.debug.unwrap() {
-                log::debug!("Query: {}", query);
-                if !bindings.is_empty() {
-                    log::debug!("Params: \"{}\"", bindings.join("\", \""));
-                }
+            log::debug!("Query: {}", query);
+            if !bindings.is_empty() {
+                log::debug!("Params: \"{}\"", bindings.join("\", \""));
             }
         }
 

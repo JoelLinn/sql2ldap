@@ -54,7 +54,7 @@ fn main() -> Result<(), String> {
     let config: Arc<Config> = Arc::new({
         let mut c: Config = load_config(cmd.value_of("config").unwrap())?;
         if cmd.is_present("debug") {
-            c.server.debug = Some(true);
+            c.server.debug = true;
         }
         c
     });
@@ -63,7 +63,7 @@ fn main() -> Result<(), String> {
         use simplelog::{
             ColorChoice, CombinedLogger, Config, LevelFilter, TermLogger, TerminalMode,
         };
-        let level = if config.server.debug.unwrap() {
+        let level = if config.server.debug {
             LevelFilter::Debug
         } else {
             LevelFilter::Warn
@@ -81,14 +81,14 @@ fn main() -> Result<(), String> {
     }
 
     // Bind before dropping privileges:
-    let addr = net::SocketAddr::new(config.server.ip, config.server.port.unwrap_or(389));
+    let addr = net::SocketAddr::new(config.server.ip, config.server.port);
     let listener = std::net::TcpListener::bind(&addr)
         .map_err(|err| format!("Can not bind to {}: {}", addr, err))?;
     listener.set_nonblocking(true).unwrap();
 
     drop_privileges()?;
 
-    let seccomp_programs = if config.server.seccomp.unwrap()
+    let seccomp_programs = if config.server.seccomp
         && cfg!(target_os = "linux")
         && (cfg!(target_arch = "x86_64") || cfg!(target_arch = "aarch64"))
     {
@@ -102,10 +102,10 @@ fn main() -> Result<(), String> {
     };
 
     let mut rt_builder = tokio::runtime::Builder::new_multi_thread();
-    if config.server.seccomp.unwrap() {
+    if config.server.seccomp {
         rt_builder.max_blocking_threads(1);
     }
-    if cfg!(target_os = "linux") && config.server.seccomp.unwrap() {
+    if cfg!(target_os = "linux") && config.server.seccomp {
         rt_builder.on_thread_unpark(move || {
             if !SECCOMP_INSTALLED.with(|f| *f.borrow()) && SECCOMP_ARMED.load(Ordering::Acquire) {
                 log::debug!("installing seccomp filter for tid {}", unsafe {
@@ -121,7 +121,7 @@ fn main() -> Result<(), String> {
         });
     }
     rt_builder
-        .worker_threads(config.server.threads.unwrap())
+        .worker_threads(config.server.threads)
         .enable_all()
         .build()
         .unwrap()
@@ -223,20 +223,12 @@ fn load_config(config_toml_filename: &str) -> Result<Config, String> {
             ));
         }
     };
-    let mut config: Config = toml::from_str(&config_toml).map_err(|err| {
+    toml::from_str::<Config>(&config_toml).map_err(|err| {
         format!(
             "Error parsing config file {}: {}",
             config_toml_filename, err
         )
-    })?;
-
-    // Fill (some) defaults:
-    // This uses the same method as tokio:
-    config.server.threads = config.server.threads.or_else(|| Some(num_cpus::get()));
-    config.server.seccomp = config.server.seccomp.or(Some(false));
-    config.server.debug = config.server.debug.or(Some(false));
-
-    Ok(config)
+    })
 }
 
 fn build_pg_connect_options(
@@ -258,9 +250,9 @@ fn build_pg_connect_options(
         con_opts = con_opts.port(port);
     }
 
-    let t = conf.server.threads.unwrap() as u32;
+    let t = conf.server.threads as u32;
     let mut pool_opts = sqlx::postgres::PgPoolOptions::new();
-    if conf.server.seccomp.unwrap() {
+    if conf.server.seccomp {
         // Can't open a connection when seccomp filter is active
         pool_opts = pool_opts
             .max_lifetime(None)

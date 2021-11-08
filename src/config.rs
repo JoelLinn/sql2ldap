@@ -27,16 +27,37 @@ pub struct Config {
     pub sql: ConfigSql,
     pub ldap: ConfigLdap,
     pub mappings: Mappings,
-    //pub mappings: HashMap<String, String>,
 }
 
 #[derive(Deserialize)]
 pub struct ConfigServer {
+    #[serde(default = "default_server_ip")]
     pub ip: std::net::IpAddr,
-    pub port: Option<u16>,
-    pub threads: Option<usize>,
-    pub seccomp: Option<bool>,
-    pub debug: Option<bool>,
+    #[serde(default = "default_server_port")]
+    pub port: u16,
+    #[serde(default = "default_server_threads")]
+    pub threads: usize,
+    #[serde(default = "default_server_seccomp")]
+    pub seccomp: bool,
+    #[serde(default = "default_server_debug")]
+    pub debug: bool,
+}
+
+fn default_server_ip() -> std::net::IpAddr {
+    std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0))
+}
+fn default_server_port() -> u16 {
+    389
+}
+fn default_server_threads() -> usize {
+    // This uses the same method as tokio:
+    num_cpus::get()
+}
+fn default_server_seccomp() -> bool {
+    false
+}
+fn default_server_debug() -> bool {
+    false
 }
 
 #[derive(Deserialize)]
