@@ -111,10 +111,8 @@ fn main() -> Result<(), String> {
                 log::debug!("installing seccomp filter for tid {}", unsafe {
                     libc::syscall(libc::SYS_gettid)
                 });
-                if let Some(ps) = &seccomp_programs {
-                    for p in ps {
-                        seccompiler::apply_filter(p).expect("Error applying seccomp filter");
-                    }
+                for p in seccomp_programs.as_ref().unwrap() {
+                    seccompiler::apply_filter(p).expect("Error applying seccomp filter");
                 }
                 SECCOMP_INSTALLED.with(|f| *f.borrow_mut() = true);
             }
@@ -427,7 +425,7 @@ fn build_seccomp_program() -> Result<Vec<BpfProgram>, seccompiler::BackendError>
         ]
         .into_iter()
         .collect(),
-        SeccompAction::KillProcess,
+        SeccompAction::Trap,
         SeccompAction::Allow,
         target_arch,
     )?;
