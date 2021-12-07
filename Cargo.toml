@@ -1,6 +1,6 @@
 [package]
 name = "sql2ldap"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Joel Linn <jl@conductive.de>"]
 license = "AGPL-3.0-only"
 edition = "2021"
