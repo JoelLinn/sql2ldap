@@ -15,11 +15,11 @@
 use std::sync::Arc;
 
 use futures::TryStreamExt;
-use ldap3_server::proto::{
+use ldap3_proto::proto::{
     LdapFilter, LdapMsg, LdapPartialAttribute, LdapResultCode, LdapSearchResultEntry,
 };
-use ldap3_server::simple::{SearchRequest, SimpleBindRequest, WhoamiRequest};
-use ldap3_server::LdapSearchScope;
+use ldap3_proto::simple::{SearchRequest, SimpleBindRequest, WhoamiRequest};
+use ldap3_proto::LdapSearchScope;
 use sqlx::Row;
 
 use crate::config::*;

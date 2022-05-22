@@ -25,10 +25,10 @@ mod ldap_session;
 use self::config::Config;
 use self::ldap_session::LdapSession;
 
-use clap::{App, Arg, ArgMatches};
+use clap::{Arg, ArgMatches, Command};
 use futures::{SinkExt, StreamExt};
-use ldap3_server::simple::*;
-use ldap3_server::LdapCodec;
+use ldap3_proto::simple::*;
+use ldap3_proto::LdapCodec;
 use seccompiler::{
     BpfProgram, SeccompAction, SeccompCmpArgLen, SeccompCmpOp, SeccompCondition, SeccompFilter,
     SeccompRule, TargetArch,
@@ -158,27 +158,27 @@ fn main() -> Result<(), String> {
         })
 }
 
-fn load_command_line() -> ArgMatches<'static> {
-    let matches = App::new(clap::crate_name!())
+fn load_command_line() -> ArgMatches {
+    let matches = Command::new(clap::crate_name!())
         .version(clap::crate_version!())
         .author(clap::crate_authors!())
         .about("Present relational SQL data 📋 to LDAP clients 🍇")
         .arg(
-            Arg::with_name("config")
+            Arg::new("config")
                 .long("config")
-                .short("c")
+                .short('c')
                 .value_name("FILE")
                 .default_value(DEFAULT_CONFIG_FILE)
                 .help("Sets the configuration file")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("debug")
+            Arg::new("debug")
                 .long("debug")
                 .help("Prints the generated SQL queries"),
         )
         .arg(
-            Arg::with_name("license")
+            Arg::new("license")
                 .long("license")
                 .help("Prints the program license and exits"),
         )
@@ -470,7 +470,7 @@ async fn handle_client(
         // TODO switch to full Op handling
         let search_sizelimit = match &msg {
             Ok(msg) => match &msg.op {
-                ldap3_server::proto::LdapOp::SearchRequest(req) => req.sizelimit,
+                ldap3_proto::proto::LdapOp::SearchRequest(req) => req.sizelimit,
                 _ => 0,
             },
             Err(_) => 0,
