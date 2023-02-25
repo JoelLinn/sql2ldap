@@ -25,7 +25,7 @@ mod ldap_session;
 use self::config::Config;
 use self::ldap_session::LdapSession;
 
-use clap::{Arg, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use futures::{SinkExt, StreamExt};
 use ldap3_proto::simple::*;
 use ldap3_proto::LdapCodec;
@@ -46,14 +46,14 @@ thread_local!(static SECCOMP_INSTALLED: RefCell<bool> = RefCell::new(false));
 fn main() -> Result<(), String> {
     let cmd = load_command_line();
 
-    if cmd.is_present("license") {
+    if cmd.get_flag("license") {
         print_license();
         return Ok(());
     }
 
     let config: Arc<Config> = Arc::new({
-        let mut c: Config = load_config(cmd.value_of("config").unwrap())?;
-        if cmd.is_present("debug") {
+        let mut c: Config = load_config(cmd.get_one::<String>("config").unwrap().as_str())?;
+        if cmd.get_flag("debug") {
             c.server.debug = true;
         }
         c
@@ -170,17 +170,19 @@ fn load_command_line() -> ArgMatches {
                 .value_name("FILE")
                 .default_value(DEFAULT_CONFIG_FILE)
                 .help("Sets the configuration file")
-                .takes_value(true),
+                .num_args(1),
         )
         .arg(
             Arg::new("debug")
                 .long("debug")
-                .help("Prints the generated SQL queries"),
+                .help("Prints the generated SQL queries")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("license")
                 .long("license")
-                .help("Prints the program license and exits"),
+                .help("Prints the program license and exits")
+                .action(ArgAction::SetTrue),
         )
         .get_matches();
     matches

@@ -1,0 +1,37 @@
+[server]
+#ip          = "0.0.0.0"
+port        = 3890
+seccomp     = true
+threads     = 4
+
+[sql]
+backend     = "PostgreSQL"
+host        = "bremerhaven.i.linn.io"
+port        = 5430
+#host        = "unix:///var/lib/pg.sock"
+user        = "fz_ro"
+pass        = "ies6Ier2cei3aigei8Oeru4wahxo9aeV"
+database    = "fz"
+table       = "kunden"
+
+[ldap]
+#suffix      = "dc=example,dc=com"
+#suffix      = "dc=fisch-linn,dc=de"
+#suffix      = "ou=PhoneDir,dc=pbx,dc=privat,dc=linn,dc=local"
+suffix      = "ou=Kunden,ou=PhoneDir,dc=pbx,dc=privat,dc=linn,dc=local"
+
+[mappings]
+cn              = "kundennr"
+objectClass     = "'inetOrgPerson'"
+displayName     = "CONCAT((geschaeft || ': '), nachname, (', ' || vorname))"
+o               = "geschaeft"
+sn              = "nachname"
+givenName       = "vorname"
+telephoneNumber = "festnetz_gesch"
+homePhone       = "festnetz_privat"
+mobile          = "mobil"
+postalAddress   = "strasse"
+postalCode      = "plz"
+l               = "ort"
+st              = "land"
+mail            = "email"

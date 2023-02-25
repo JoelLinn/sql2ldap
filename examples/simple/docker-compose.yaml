@@ -3,7 +3,7 @@ version: '3.7'
 services:
 
   db:
-    image: postgres:14
+    image: postgres:15
     restart: always
     ports:
       # You normally don't want to expose this in production:
