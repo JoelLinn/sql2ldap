@@ -1,6 +1,6 @@
 [package]
 name = "sql2ldap"
-version = "1.0.0"
+version = "1.1.0"
 authors = ["Joel Linn <jl@conductive.de>"]
 license = "AGPL-3.0-only"
 edition = "2021"
@@ -11,18 +11,18 @@ edition = "2021"
 caps = "0.5"
 clap = { version = "4", features = [ "cargo" ] }
 futures = "0.3"
-ldap3_proto = "0.2"
+ldap3_proto = "0.4"
 libc = "0.2"
 log = "0.4"
 num_cpus = "1"
-seccompiler = "0.3"
+seccompiler = "0.4"
 serde = "1"
 serde_derive = "1"
 simplelog = "0.12"
-sqlx = { version = "0.6", features = [ "runtime-tokio-rustls", "postgres" ] }
+sqlx = { version = "0.7", features = [ "runtime-tokio-rustls", "postgres" ] }
 tokio = { version = "1", features = ["rt-multi-thread", "io-util", "net", "signal", "macros"] }
 tokio-util = { version = "0.7", features = ["codec"] }
-toml = "0.7"
+toml = "0.8"
 
 [profile.release]
 lto = true

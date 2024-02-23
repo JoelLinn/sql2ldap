@@ -18,7 +18,7 @@ use futures::TryStreamExt;
 use ldap3_proto::proto::{
     LdapFilter, LdapMsg, LdapPartialAttribute, LdapResultCode, LdapSearchResultEntry,
 };
-use ldap3_proto::simple::{SearchRequest, SimpleBindRequest, WhoamiRequest};
+use ldap3_proto::simple::{CompareRequest, SearchRequest, SimpleBindRequest, WhoamiRequest};
 use ldap3_proto::LdapSearchScope;
 use sqlx::Row;
 
@@ -63,11 +63,11 @@ impl LdapSession {
                         attributes: vec![
                             LdapPartialAttribute {
                                 atype: "objectClass".to_owned(),
-                                vals: vec!["top".to_owned()],
+                                vals: vec!["top".as_bytes().to_vec()],
                             },
                             LdapPartialAttribute {
                                 atype: "namingContexts".to_owned(),
-                                vals: vec![self.conf.ldap.suffix.to_owned()],
+                                vals: vec![self.conf.ldap.suffix.as_bytes().to_vec()],
                             },
                         ],
                     }),
@@ -96,19 +96,19 @@ impl LdapSession {
                         attributes: vec![
                             LdapPartialAttribute {
                                 atype: "objectClass".to_owned(),
-                                vals: vec![object_class],
+                                vals: vec![object_class.as_bytes().to_vec()],
                             },
                             LdapPartialAttribute {
                                 atype: leaf_short,
-                                vals: vec![leaf_name],
+                                vals: vec![leaf_name.as_bytes().to_vec()],
                             },
                             LdapPartialAttribute {
                                 atype: "hasSubordinates".to_owned(),
-                                vals: vec!["TRUE".to_owned()],
+                                vals: vec!["TRUE".as_bytes().to_vec()],
                             },
                             LdapPartialAttribute {
                                 atype: "entryDN".to_owned(),
-                                vals: vec![self.conf.ldap.suffix.to_owned()],
+                                vals: vec![self.conf.ldap.suffix.as_bytes().to_vec()],
                             },
                         ],
                     }),
@@ -200,7 +200,7 @@ impl LdapSession {
                 if let Some(x) = value.filter(|s| s.len() > 0) {
                     attributes.push(LdapPartialAttribute {
                         atype: attr,
-                        vals: vec![x],
+                        vals: vec![x.as_bytes().to_vec()],
                     })
                 };
             };
@@ -229,6 +229,12 @@ impl LdapSession {
 
         results.push(lsr.gen_success());
         results
+    }
+
+    pub fn do_compare(&mut self, cp: &CompareRequest) -> LdapMsg {
+        cp.gen_error(
+            LdapResultCode::Other,
+            "Compare not implemented".to_owned())
     }
 
     pub fn do_whoami(&mut self, wr: &WhoamiRequest) -> LdapMsg {
@@ -370,7 +376,6 @@ fn build_filter_inner(
             query.push_str(" <> '' ");
             Ok(())
         }
-        #[allow(unreachable_patterns)]
         _ => Err(vec![lsr.gen_error(
             LdapResultCode::Other,
             "Filter not implemented".to_owned(),

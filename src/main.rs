@@ -464,8 +464,8 @@ async fn handle_client(
 ) {
     // Configure the codec etc.
     let (r, w) = tokio::io::split(socket);
-    let mut reqs = FramedRead::new(r, LdapCodec);
-    let mut resp = FramedWrite::new(w, LdapCodec);
+    let mut reqs = FramedRead::new(r, LdapCodec::default());
+    let mut resp = FramedWrite::new(w, LdapCodec::default());
     let mut session = LdapSession::new(config, db_pool);
 
     while let Some(msg) = reqs.next().await {
@@ -501,6 +501,7 @@ async fn handle_client(
             ServerOps::Unbind(_) => {
                 return;
             }
+            ServerOps::Compare(cp) => vec![session.do_compare(&cp)],
             ServerOps::Whoami(wr) => vec![session.do_whoami(&wr)],
         };
 
