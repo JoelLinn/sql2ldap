@@ -1,4 +1,4 @@
-FROM rust:alpine3.17 as builder_deps
+FROM rust:alpine3.19 as builder_deps
 
 WORKDIR /usr/src/sql2ldap
 
@@ -21,7 +21,7 @@ RUN touch src/main.rs ; \
     cargo install --path .
 
 
-FROM alpine:3.17
+FROM alpine:3.19
 
 COPY --from=builder /usr/local/cargo/bin/sql2ldap /usr/local/bin/sql2ldap
 
